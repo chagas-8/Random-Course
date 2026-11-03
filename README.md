@@ -19,6 +19,22 @@ Um jogo simples de plataforma com um local fixo que o personagem começa e outro
    ./jogo.exe
    ```
 
+## Como rodar (Mac)
+
+1. Instale as ferramentas da Apple: `xcode-select --install`
+2. Instale o [Homebrew](https://brew.sh) e depois a raylib:
+   ```
+   brew install raylib pkg-config
+   ```
+3. Clone o repositório e, dentro da pasta, compile:
+   ```
+   cc main.c -o jogo $(pkg-config --cflags --libs raylib)
+   ```
+4. Rode o jogo:
+   ```
+   ./jogo
+   ```
+   
 ## Controles
 
 - **Setas:** andar
