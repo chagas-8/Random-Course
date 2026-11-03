@@ -10,11 +10,15 @@ Um jogo simples de plataforma com um local fixo que o personagem começa e outro
    ```
    git clone https://github.com/chagas-8/Random-Course.git
    ```
-4. Abra a pasta no VS Code e, no terminal, compile:
+4. Abra a pasta no VS Code:
+   ```
+   cd Random-Course
+   ```
+5. No terminal, compile:
    ```
    C:\raylib\w64devkit\bin\gcc.exe main.c -o jogo.exe -I C:/raylib/raylib/src -L C:/raylib/raylib/src -lraylib -lgdi32 -lwinmm
    ```
-5. Rode o jogo:
+6. Rode o jogo:
    ```
    ./jogo.exe
    ```
@@ -26,15 +30,23 @@ Um jogo simples de plataforma com um local fixo que o personagem começa e outro
    ```
    brew install raylib pkg-config
    ```
-3. Clone o repositório e, dentro da pasta, compile:
+3. Clone o repositório:
+   ```
+   git clone https://github.com/chagas-8/Random-Course.git
+   ```
+4. Abra a pasta no VS Code:
+   ```
+   cd Random-Course
+   ```
+5. No terminal, compile:
    ```
    cc main.c -o jogo $(pkg-config --cflags --libs raylib)
    ```
-4. Rode o jogo:
+6. Rode o jogo:
    ```
    ./jogo
    ```
-   
+
 ## Controles
 
 - **Setas:** andar
