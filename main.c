@@ -289,6 +289,18 @@ void textoCentralizado(const char *texto, int y, int tamanho, Color cor) {
     DrawText(texto, x, y, tamanho, cor);
 }
 
+char proximoCaractere(char c) {
+    if (c == 'Z') return '0';
+    if (c == '9') return 'A';
+    return c + 1;
+}
+
+char caractereAnterior(char c) {
+    if (c == 'A') return '9';
+    if (c == '0') return 'Z';
+    return c - 1;
+}
+
 int main(void) {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     InitWindow(LARGURA, ALTURA, "Random Course");
@@ -325,7 +337,8 @@ int main(void) {
     int letraAtual = 0;
     Recorde ranking[MAX_RANKING];
     int totalRanking = lerRanking(ranking);
-    while (!WindowShouldClose()) {
+    bool sair = false;
+    while (!WindowShouldClose() && !sair) {
         float dt = GetFrameTime();
         bool podeSalvar = !recordeSalvo && nivel > 0 && entraNoRanking(ranking, totalRanking, nivel);
         if (dt > 0.05f) dt = 0.05f;
@@ -333,6 +346,7 @@ int main(void) {
         if (IsKeyPressed(KEY_F)) ToggleBorderlessWindowed();
 
         if (estado == ESTADO_MENU) {
+            if (IsKeyPressed(KEY_ESCAPE)) sair = true;
             if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_DOWN)) opcaoMenu = !opcaoMenu;
             if (IsKeyPressed(KEY_ENTER)) {
                 if (opcaoMenu == 0) {
@@ -345,13 +359,11 @@ int main(void) {
         }
         else if (estado == ESTADO_JOGO) {
             j.vel.x = 0;
-            if (IsKeyDown(KEY_LEFT))  j.vel.x = -VEL_ANDAR;
-            if (IsKeyDown(KEY_RIGHT)) j.vel.x = VEL_ANDAR;
-            if (IsKeyPressed(KEY_SPACE) && j.noChao) j.vel.y = -VEL_PULO;
-            if (IsKeyPressed(KEY_R)) {
-                novaFase(mapa, &plataformas);
-                resetarJogador(&j);
-            }
+            if (IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_A))  j.vel.x = -VEL_ANDAR;
+            if (IsKeyDown(KEY_RIGHT) || IsKeyDown(KEY_D)) j.vel.x = VEL_ANDAR;
+
+            bool pulo = IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W);
+            if (pulo && j.noChao) j.vel.y = -VEL_PULO;
 
             j.vel.y += GRAVIDADE * dt;
 
@@ -391,8 +403,8 @@ int main(void) {
             }
         }
         else if (estado == ESTADO_GAMEOVER) {
-            if (IsKeyPressed(KEY_UP))   opcaoGameOver = (opcaoGameOver + 2) % 3;
-            if (IsKeyPressed(KEY_DOWN)) opcaoGameOver = (opcaoGameOver + 1) % 3;
+            if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W))   opcaoGameOver = (opcaoGameOver + 2) % 3;
+            if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) opcaoGameOver = (opcaoGameOver + 1) % 3;
 
             if (IsKeyPressed(KEY_ENTER)) {
                 if (opcaoGameOver == 0) {
@@ -408,8 +420,8 @@ int main(void) {
             }
         }
         else if (estado == ESTADO_NOME) {
-            if (IsKeyPressed(KEY_UP))   nome[letraAtual] = nome[letraAtual] == 'Z' ? 'A' : nome[letraAtual] + 1;
-            if (IsKeyPressed(KEY_DOWN)) nome[letraAtual] = nome[letraAtual] == 'A' ? 'Z' : nome[letraAtual] - 1;
+            if (IsKeyPressed(KEY_UP))   nome[letraAtual] = proximoCaractere(nome[letraAtual]);
+            if (IsKeyPressed(KEY_DOWN)) nome[letraAtual] = caractereAnterior(nome[letraAtual]);
             if (IsKeyPressed(KEY_LEFT)  && letraAtual > 0) letraAtual--;
             if (IsKeyPressed(KEY_RIGHT) && letraAtual < 2) letraAtual++;
 
@@ -445,7 +457,7 @@ int main(void) {
             desenharCentralizado(texLogo, 50, 600);
             textoCentralizado("JOGAR", 300, 28, opcaoMenu == 0 ? RED : WHITE);
             textoCentralizado("RANKING", 340, 28, opcaoMenu == 1 ? RED : WHITE);
-            textoCentralizado("Setas para escolher, Enter para confirmar", 410, 16, GRAY);
+            textoCentralizado("Setas para escolher, Enter para confirmar, Esc para sair", 410, 16, GRAY);
         }
         else if (estado == ESTADO_RANKING) {
             textoCentralizado("RANKING", 50, 40, RED);
