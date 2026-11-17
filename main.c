@@ -215,6 +215,12 @@ int main(void) {
     InitWindow(LARGURA, ALTURA, "Jogo de Plataforma");
     SetTargetFPS(60);
 
+    Texture2D texFundo   = LoadTexture("assets/fundo.png");
+    Texture2D texTopo    = LoadTexture("assets/bloco_topo.png");
+    Texture2D texMeio    = LoadTexture("assets/bloco_meio.png");
+    Texture2D texPorta   = LoadTexture("assets/porta.png");
+    Texture2D texJogador = LoadTexture("assets/jogador.png");
+
     int **mapa = criarMapa();
     SetRandomSeed((unsigned int)time(NULL));
     Plataforma *plataformas = NULL;
@@ -285,18 +291,28 @@ int main(void) {
         }
 
         BeginDrawing();
-        ClearBackground(RAYWHITE);
+        ClearBackground(BLACK);
+        DrawTexture(texFundo, 0, 0, WHITE);
 
         for (int l = 0; l < LINHAS; l++) {
-        for (int c = 0; c < COLUNAS; c++) {
-            if (mapa[l][c] == BLOCO) DrawRectangle(c * TAM_BLOCO, l * TAM_BLOCO, TAM_BLOCO, TAM_BLOCO, DARKGRAY);
-            else if (mapa[l][c] == PORTA) DrawRectangle(c * TAM_BLOCO, l * TAM_BLOCO, TAM_BLOCO, TAM_BLOCO, BROWN);
-        }
-}
-        DrawRectangleRec(j.corpo, BLUE);
+            for (int c = 0; c < COLUNAS; c++) {
+                int x = c * TAM_BLOCO, y = l * TAM_BLOCO;
 
-        DrawText(TextFormat("Nivel: %d", nivel), 10, 10, 20, BLACK);
-        DrawText(TextFormat("Tempo: %.1f", tempo), 10, 35, 20, tempo < 5 ? RED : BLACK);
+                if (mapa[l][c] == BLOCO) {
+                    if (l == 0 || mapa[l - 1][c] != BLOCO)
+                    DrawTexture(texTopo, x, y, WHITE);
+                else
+                    DrawTexture(texMeio, x, y, WHITE);
+        }
+            else if (mapa[l][c] == PORTA && (l == 0 || mapa[l - 1][c] != PORTA)) {
+                DrawTexture(texPorta, x, y, WHITE);
+        }
+    }
+}
+        DrawTexture(texJogador, (int)j.corpo.x, (int)j.corpo.y, WHITE);
+
+        DrawText(TextFormat("Nivel: %d", nivel), 10, 10, 20, WHITE);
+        DrawText(TextFormat("Tempo: %.1f", tempo), 10, 35, 20, tempo < 5 ? RED : WHITE);
 
         if (gameOver) {
             DrawRectangle(0, 0, LARGURA, ALTURA, Fade(BLACK, 0.6f));
@@ -310,6 +326,11 @@ int main(void) {
 
     liberarLista(plataformas);
     liberarMapa(mapa);
+    UnloadTexture(texFundo);
+    UnloadTexture(texTopo);
+    UnloadTexture(texMeio);
+    UnloadTexture(texPorta);
+    UnloadTexture(texJogador);
     CloseWindow();
     return 0;
 }
