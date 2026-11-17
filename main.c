@@ -272,7 +272,9 @@ int main(void) {
                 if (tempoMax < TEMPO_MINIMO) tempoMax = TEMPO_MINIMO;
                 tempo = tempoMax;
                 resetarJogador(&j);
+                novaFase(mapa, &plataformas);
             }
+            
         } else if (IsKeyPressed(KEY_ENTER)) {
             nivel = 0;
             tempoMax = TEMPO_INICIAL;
