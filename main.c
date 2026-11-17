@@ -31,6 +31,7 @@ typedef struct {
     Rectangle corpo;
     Vector2 vel;
     bool noChao;
+    bool olhandoEsquerda;
 } Jogador;
 
 typedef struct Plataforma {
@@ -56,6 +57,7 @@ void resetarJogador(Jogador *j) {
     j->corpo = (Rectangle){ 40, 344, LARG_JOGADOR, ALT_JOGADOR };
     j->vel = (Vector2){ 0, 0 };
     j->noChao = false;
+    j->olhandoEsquerda = false;
 }
 int **criarMapa(void) {
     int **mapa = malloc(LINHAS * sizeof(int *));
@@ -402,6 +404,9 @@ int main(void) {
             if (IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_A))  j.vel.x = -VEL_ANDAR;
             if (IsKeyDown(KEY_RIGHT) || IsKeyDown(KEY_D)) j.vel.x = VEL_ANDAR;
 
+            if (j.vel.x < 0) j.olhandoEsquerda = true;
+            else if (j.vel.x > 0) j.olhandoEsquerda = false;
+
             bool pulo = IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W);
             if (pulo && j.noChao) j.vel.y = -VEL_PULO;
             moverJogador(mapa, &j, dt);
@@ -476,7 +481,7 @@ int main(void) {
             desenharCentralizado(texLogo, 50, 600);
             textoCentralizado("JOGAR", 300, 28, opcaoMenu == 0 ? RED : WHITE);
             textoCentralizado("RANKING", 340, 28, opcaoMenu == 1 ? RED : WHITE);
-            textoCentralizado("Setas para escolher, Enter para confirmar, Esc para sair", 410, 16, GRAY);
+            textoCentralizado("F para tela cheia, Setas/WASD para escolher, Enter para confirmar, Esc para sair", 410, 16, GRAY);
         }
         else if (estado == ESTADO_RANKING) {
             textoCentralizado("RANKING", 50, 40, RED);
@@ -487,7 +492,7 @@ int main(void) {
                 textoCentralizado(TextFormat("%d. %s  -  %d niveis", i + 1, ranking[i].nome, ranking[i].niveis),
                                 130 + i * 45, 28, i == 0 ? GOLD : WHITE);
             }
-            textoCentralizado("Enter para voltar", 400, 18, GRAY);
+            textoCentralizado("Enter/Esc para voltar", 400, 18, GRAY);
         }
         else {
             for (int l = 0; l < LINHAS; l++) {
@@ -505,7 +510,9 @@ int main(void) {
                     }
                 }
             }
-            DrawTexture(texJogador, (int)j.corpo.x, (int)j.corpo.y, WHITE);
+            Rectangle origemJogador = { 0, 0, (float)texJogador.width, (float)texJogador.height };
+            if (j.olhandoEsquerda) origemJogador.width = -origemJogador.width;
+            DrawTextureRec(texJogador, origemJogador, (Vector2){ (int)j.corpo.x, (int)j.corpo.y }, WHITE);
 
             DrawText(TextFormat("Nivel: %d", nivel), 10, 10, 20, WHITE);
             DrawText(TextFormat("Tempo: %.1f", tempo), 10, 35, 20, tempo < 5 ? RED : WHITE);
@@ -524,7 +531,7 @@ int main(void) {
                         if (i == 1 && !podeSalvar) cor = (opcaoGameOver == i) ? MAROON : DARKGRAY;
                         textoCentralizado(opcoes[i], 260 + i * 35, 24, cor);
                     }
-                    textoCentralizado("Setas para escolher, Enter para confirmar", 400, 16, GRAY);
+                    textoCentralizado("Setas/WASD para escolher, Enter para confirmar", 400, 16, GRAY);
                 } else {
                     textoCentralizado("Digite seu nome", 255, 20, LIGHTGRAY);
                     for (int i = 0; i < 3; i++) {
@@ -532,7 +539,7 @@ int main(void) {
                         DrawText(TextFormat("%c", nome[i]), x + 8, 290, 36, i == letraAtual ? RED : WHITE);
                         if (i == letraAtual) DrawRectangle(x + 4, 330, 28, 4, RED);
                     }
-                    textoCentralizado("Setas trocam a letra, Enter salva, Backspace cancela", 400, 16, GRAY);
+                    textoCentralizado("Teclado escreve, Setas trocam a letra, Enter salva, Backspace cancela", 400, 16, GRAY);
                 }
             }
         }
