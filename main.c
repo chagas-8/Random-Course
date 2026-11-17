@@ -211,15 +211,30 @@ void novaFase(int **mapa, Plataforma **lista) {
     } while (!faseValida(mapa));
 }
 
+void desenharCentralizado(Texture2D tex, float y, float larguraMax) {
+    float escala = 1.0f;
+    if (tex.width > larguraMax) escala = larguraMax / tex.width;
+
+    float x = (LARGURA - tex.width * escala) / 2;
+    DrawTextureEx(tex, (Vector2){ x, y }, 0, escala, WHITE);
+}
+
 int main(void) {
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     InitWindow(LARGURA, ALTURA, "Jogo de Plataforma");
     SetTargetFPS(60);
+    SetExitKey(KEY_NULL);
 
     Texture2D texFundo   = LoadTexture("assets/fundo.png");
     Texture2D texTopo    = LoadTexture("assets/bloco_topo.png");
     Texture2D texMeio    = LoadTexture("assets/bloco_meio.png");
     Texture2D texPorta   = LoadTexture("assets/porta.png");
     Texture2D texJogador = LoadTexture("assets/jogador.png");
+    Texture2D texLogo    = LoadTexture("assets/logo.png");
+    Texture2D texGameOver = LoadTexture("assets/gameover.png");
+
+    RenderTexture2D tela = LoadRenderTexture(LARGURA, ALTURA);
+    SetTextureFilter(tela.texture, TEXTURE_FILTER_POINT);
 
     int **mapa = criarMapa();
     SetRandomSeed((unsigned int)time(NULL));
@@ -233,11 +248,17 @@ int main(void) {
     float tempo = tempoMax;
     int nivel = 0;
     bool gameOver = false;
+    bool telaInicial = true;
 
     while (!WindowShouldClose()) {
         float dt = GetFrameTime();
 
-        if (!gameOver) {
+        if (IsKeyPressed(KEY_F)) ToggleBorderlessWindowed();
+
+        if (telaInicial) {
+            if (IsKeyPressed(KEY_ENTER)) telaInicial = false;
+        }
+        else if (!gameOver) {
             j.vel.x = 0;
             if (IsKeyDown(KEY_LEFT))  j.vel.x = -VEL_ANDAR;
             if (IsKeyDown(KEY_RIGHT)) j.vel.x = VEL_ANDAR;
@@ -245,7 +266,6 @@ int main(void) {
             if (IsKeyPressed(KEY_R)) {
                 novaFase(mapa, &plataformas);
                 resetarJogador(&j);
-                novaFase(mapa, &plataformas);
             }
 
             j.vel.y += GRAVIDADE * dt;
@@ -280,8 +300,8 @@ int main(void) {
                 resetarJogador(&j);
                 novaFase(mapa, &plataformas);
             }
-            
-        } else if (IsKeyPressed(KEY_ENTER)) {
+        }
+        else if (IsKeyPressed(KEY_ENTER)) {
             nivel = 0;
             tempoMax = TEMPO_INICIAL;
             tempo = tempoMax;
@@ -290,37 +310,54 @@ int main(void) {
             novaFase(mapa, &plataformas);
         }
 
-        BeginDrawing();
+        BeginTextureMode(tela);
         ClearBackground(BLACK);
         DrawTexture(texFundo, 0, 0, WHITE);
 
-        for (int l = 0; l < LINHAS; l++) {
-            for (int c = 0; c < COLUNAS; c++) {
-                int x = c * TAM_BLOCO, y = l * TAM_BLOCO;
-
-                if (mapa[l][c] == BLOCO) {
-                    if (l == 0 || mapa[l - 1][c] != BLOCO)
-                    DrawTexture(texTopo, x, y, WHITE);
-                else
-                    DrawTexture(texMeio, x, y, WHITE);
+        if (telaInicial) {
+            desenharCentralizado(texLogo, 117, 600);
         }
-            else if (mapa[l][c] == PORTA && (l == 0 || mapa[l - 1][c] != PORTA)) {
-                DrawTexture(texPorta, x, y, WHITE);
+        else {
+            for (int l = 0; l < LINHAS; l++) {
+                for (int c = 0; c < COLUNAS; c++) {
+                    int x = c * TAM_BLOCO, y = l * TAM_BLOCO;
+
+                    if (mapa[l][c] == BLOCO) {
+                        if (l == 0 || mapa[l - 1][c] != BLOCO)
+                            DrawTexture(texTopo, x, y, WHITE);
+                        else
+                            DrawTexture(texMeio, x, y, WHITE);
+                    }
+                    else if (mapa[l][c] == PORTA && (l == 0 || mapa[l - 1][c] != PORTA)) {
+                        DrawTexture(texPorta, x, y, WHITE);
+                    }
+                }
+            }
+            DrawTexture(texJogador, (int)j.corpo.x, (int)j.corpo.y, WHITE);
+
+            DrawText(TextFormat("Nivel: %d", nivel), 10, 10, 20, WHITE);
+            DrawText(TextFormat("Tempo: %.1f", tempo), 10, 35, 20, tempo < 5 ? RED : WHITE);
+
+            if (gameOver) {
+                DrawRectangle(0, 0, LARGURA, ALTURA, Fade(BLACK, 0.6f));
+                desenharCentralizado(texGameOver, 60, 500);
+                DrawText(TextFormat("Niveis passados: %d", nivel), 300, 215, 22, WHITE);
+                DrawText("Enter para recomecar", 295, 255, 20, LIGHTGRAY);
+            }
         }
-    }
-}
-        DrawTexture(texJogador, (int)j.corpo.x, (int)j.corpo.y, WHITE);
+        EndTextureMode();
 
-        DrawText(TextFormat("Nivel: %d", nivel), 10, 10, 20, WHITE);
-        DrawText(TextFormat("Tempo: %.1f", tempo), 10, 35, 20, tempo < 5 ? RED : WHITE);
+        BeginDrawing();
+        ClearBackground(BLACK);
 
-        if (gameOver) {
-            DrawRectangle(0, 0, LARGURA, ALTURA, Fade(BLACK, 0.6f));
-            DrawText("GAME OVER", 290, 160, 40, RED);
-            DrawText(TextFormat("Niveis passados: %d", nivel), 300, 215, 22, WHITE);
-            DrawText("Enter para recomecar", 295, 255, 20, LIGHTGRAY);
-        }
+        float escala = fminf((float)GetScreenWidth() / LARGURA, (float)GetScreenHeight() / ALTURA);
+        float w = LARGURA * escala;
+        float h = ALTURA * escala;
 
+        DrawTexturePro(tela.texture,
+                       (Rectangle){ 0, 0, LARGURA, -ALTURA },
+                       (Rectangle){ (GetScreenWidth() - w) / 2, (GetScreenHeight() - h) / 2, w, h },
+                       (Vector2){ 0, 0 }, 0, WHITE);
         EndDrawing();
     }
 
@@ -331,6 +368,9 @@ int main(void) {
     UnloadTexture(texMeio);
     UnloadTexture(texPorta);
     UnloadTexture(texJogador);
+    UnloadTexture(texLogo);
+    UnloadTexture(texGameOver);
+    UnloadRenderTexture(tela);
     CloseWindow();
     return 0;
 }
