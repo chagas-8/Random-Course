@@ -22,6 +22,11 @@ Um jogo simples de plataforma com um local fixo que o personagem começa e outro
    ```
    ./jogo.exe
    ```
+   ou, faça:
+   ```
+   Ctrl + Shift + B
+   ```
+   Esse atalho já compila e, se não tiver nenhum erro, roda o jogo automaticamente.
 
 ## Como rodar (Mac)
 

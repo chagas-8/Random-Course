@@ -1,0 +1,18 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Compilar e rodar",
+            "type": "shell",
+            "command": "C:/raylib/w64devkit/bin/gcc.exe main.c -o jogo.exe -I C:/raylib/raylib/src -L C:/raylib/raylib/src -lraylib -lgdi32 -lwinmm; if ($?) { ./jogo.exe }",
+            "osx": {
+                "command": "cc main.c -o jogo $(pkg-config --cflags --libs raylib) && ./jogo"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": ["$gcc"]
+        }
+    ]
+}
