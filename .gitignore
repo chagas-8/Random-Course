@@ -1,3 +1,4 @@
 *.exe
 jogo
 .DS_Store
+ranking.txt

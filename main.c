@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <math.h>
 #include <time.h>
+#include <stdio.h>
+#include <string.h>
 
 #define LARGURA 800
 #define ALTURA 450
@@ -20,6 +22,8 @@
 #define TIPO_FLUTUANTE 1
 #define TIPO_TETO 2
 #define PULO_MAX_ALTURA 3
+#define MAX_RANKING 5
+#define ARQUIVO_RANKING "ranking.txt"
 
 typedef struct {
     Rectangle corpo;
@@ -32,6 +36,19 @@ typedef struct Plataforma {
     int col, lin, larg, alt;
     struct Plataforma *prox;
 } Plataforma;
+
+typedef struct {
+    char nome[4];
+    int niveis;
+} Recorde;
+
+typedef enum {
+    ESTADO_MENU,
+    ESTADO_JOGO,
+    ESTADO_GAMEOVER,
+    ESTADO_NOME,
+    ESTADO_RANKING
+} Estado;
 
 void resetarJogador(Jogador *j) {
     j->corpo = (Rectangle){ 40, 344, 20, 40 };
@@ -211,6 +228,54 @@ void novaFase(int **mapa, Plataforma **lista) {
     } while (!faseValida(mapa));
 }
 
+void iniciarPartida(Jogador *j, int **mapa, Plataforma **lista, int *nivel, float *tempoMax, float *tempo) {
+    *nivel = 0;
+    *tempoMax = TEMPO_INICIAL;
+    *tempo = *tempoMax;
+    resetarJogador(j);
+    novaFase(mapa, lista);
+}
+
+int lerRanking(Recorde ranking[]) {
+    FILE *arq = fopen(ARQUIVO_RANKING, "r");
+    if (arq == NULL) return 0;
+
+    int total = 0;
+    while (total < MAX_RANKING && fscanf(arq, "%3s %d", ranking[total].nome, &ranking[total].niveis) == 2) {
+        total++;
+    }
+    fclose(arq);
+    return total;
+}
+
+void salvarRanking(Recorde ranking[], int total) {
+    FILE *arq = fopen(ARQUIVO_RANKING, "w");
+    if (arq == NULL) return;
+
+    for (int i = 0; i < total; i++) {
+        fprintf(arq, "%s %d\n", ranking[i].nome, ranking[i].niveis);
+    }
+    fclose(arq);
+}
+
+bool entraNoRanking(Recorde ranking[], int total, int niveis) {
+    if (total < MAX_RANKING) return true;
+    return niveis > ranking[total - 1].niveis;
+}
+
+int inserirRecorde(Recorde ranking[], int total, Recorde novo) {
+    int pos = total;
+    while (pos > 0 && ranking[pos - 1].niveis < novo.niveis) pos--;
+    if (pos >= MAX_RANKING) return total;
+
+    if (total < MAX_RANKING) total++;
+    for (int i = total - 1; i > pos; i--) {
+        ranking[i] = ranking[i - 1];
+    }
+    ranking[pos] = novo;
+    return total;
+}
+
 void desenharCentralizado(Texture2D tex, float y, float larguraMax) {
     float escala = 1.0f;
     if (tex.width > larguraMax) escala = larguraMax / tex.width;
@@ -219,9 +284,14 @@ void desenharCentralizado(Texture2D tex, float y, float larguraMax) {
     DrawTextureEx(tex, (Vector2){ x, y }, 0, escala, WHITE);
 }
 
+void textoCentralizado(const char *texto, int y, int tamanho, Color cor) {
+    int x = (LARGURA - MeasureText(texto, tamanho)) / 2;
+    DrawText(texto, x, y, tamanho, cor);
+}
+
 int main(void) {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-    InitWindow(LARGURA, ALTURA, "Jogo de Plataforma");
+    InitWindow(LARGURA, ALTURA, "Random Course");
     SetTargetFPS(60);
     SetExitKey(KEY_NULL);
 
@@ -247,18 +317,33 @@ int main(void) {
     float tempoMax = TEMPO_INICIAL;
     float tempo = tempoMax;
     int nivel = 0;
-    bool gameOver = false;
-    bool telaInicial = true;
-
+    Estado estado = ESTADO_MENU;
+    int opcaoMenu = 0;
+    int opcaoGameOver = 0;
+    bool recordeSalvo = false;
+    char nome[4] = "AAA";
+    int letraAtual = 0;
+    Recorde ranking[MAX_RANKING];
+    int totalRanking = lerRanking(ranking);
     while (!WindowShouldClose()) {
         float dt = GetFrameTime();
+        bool podeSalvar = !recordeSalvo && nivel > 0 && entraNoRanking(ranking, totalRanking, nivel);
+        if (dt > 0.05f) dt = 0.05f;
 
         if (IsKeyPressed(KEY_F)) ToggleBorderlessWindowed();
 
-        if (telaInicial) {
-            if (IsKeyPressed(KEY_ENTER)) telaInicial = false;
+        if (estado == ESTADO_MENU) {
+            if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_DOWN)) opcaoMenu = !opcaoMenu;
+            if (IsKeyPressed(KEY_ENTER)) {
+                if (opcaoMenu == 0) {
+                    iniciarPartida(&j, mapa, &plataformas, &nivel, &tempoMax, &tempo);
+                    estado = ESTADO_JOGO;
+                } else {
+                    estado = ESTADO_RANKING;
+                }
+            }
         }
-        else if (!gameOver) {
+        else if (estado == ESTADO_JOGO) {
             j.vel.x = 0;
             if (IsKeyDown(KEY_LEFT))  j.vel.x = -VEL_ANDAR;
             if (IsKeyDown(KEY_RIGHT)) j.vel.x = VEL_ANDAR;
@@ -290,7 +375,11 @@ int main(void) {
                 j.vel.y = 0;
             }
             tempo -= dt;
-            if (j.corpo.y > ALTURA || tempo <= 0) gameOver = true;
+            if (j.corpo.y > ALTURA || tempo <= 0) {
+                estado = ESTADO_GAMEOVER;
+                opcaoGameOver = 0;
+                recordeSalvo = false;
+            }
 
             if (tocaTipo(mapa, j.corpo, PORTA)) {
                 nivel++;
@@ -301,21 +390,73 @@ int main(void) {
                 novaFase(mapa, &plataformas);
             }
         }
-        else if (IsKeyPressed(KEY_ENTER)) {
-            nivel = 0;
-            tempoMax = TEMPO_INICIAL;
-            tempo = tempoMax;
-            gameOver = false;
-            resetarJogador(&j);
-            novaFase(mapa, &plataformas);
-        }
+        else if (estado == ESTADO_GAMEOVER) {
+            if (IsKeyPressed(KEY_UP))   opcaoGameOver = (opcaoGameOver + 2) % 3;
+            if (IsKeyPressed(KEY_DOWN)) opcaoGameOver = (opcaoGameOver + 1) % 3;
 
+            if (IsKeyPressed(KEY_ENTER)) {
+                if (opcaoGameOver == 0) {
+                    iniciarPartida(&j, mapa, &plataformas, &nivel, &tempoMax, &tempo);
+                    estado = ESTADO_JOGO;
+                } else if (opcaoGameOver == 1 && podeSalvar) {
+                    strcpy(nome, "AAA");
+                    letraAtual = 0;
+                    estado = ESTADO_NOME;
+                } else if (opcaoGameOver == 2) {
+                    estado = ESTADO_MENU;
+                }
+            }
+        }
+        else if (estado == ESTADO_NOME) {
+            if (IsKeyPressed(KEY_UP))   nome[letraAtual] = nome[letraAtual] == 'Z' ? 'A' : nome[letraAtual] + 1;
+            if (IsKeyPressed(KEY_DOWN)) nome[letraAtual] = nome[letraAtual] == 'A' ? 'Z' : nome[letraAtual] - 1;
+            if (IsKeyPressed(KEY_LEFT)  && letraAtual > 0) letraAtual--;
+            if (IsKeyPressed(KEY_RIGHT) && letraAtual < 2) letraAtual++;
+
+            int tecla = GetCharPressed();
+            if (tecla >= 'a' && tecla <= 'z') tecla -= 32;
+            if (tecla >= 'A' && tecla <= 'Z') {
+                nome[letraAtual] = (char)tecla;
+                if (letraAtual < 2) letraAtual++;
+            }
+
+            if (IsKeyPressed(KEY_ENTER)) {
+                Recorde novo;
+                strcpy(novo.nome, nome);
+                novo.niveis = nivel;
+                totalRanking = inserirRecorde(ranking, totalRanking, novo);
+                salvarRanking(ranking, totalRanking);
+                recordeSalvo = true;
+                estado = ESTADO_GAMEOVER;
+            }
+            if (IsKeyPressed(KEY_BACKSPACE)) estado = ESTADO_GAMEOVER;
+        }
+        else if (estado == ESTADO_RANKING) {
+            if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_BACKSPACE) || IsKeyPressed(KEY_ESCAPE)) {
+                estado = ESTADO_MENU;
+            }
+        }
+        
         BeginTextureMode(tela);
         ClearBackground(BLACK);
         DrawTexture(texFundo, 0, 0, WHITE);
 
-        if (telaInicial) {
-            desenharCentralizado(texLogo, 117, 600);
+        if (estado == ESTADO_MENU) {
+            desenharCentralizado(texLogo, 50, 600);
+            textoCentralizado("JOGAR", 300, 28, opcaoMenu == 0 ? RED : WHITE);
+            textoCentralizado("RANKING", 340, 28, opcaoMenu == 1 ? RED : WHITE);
+            textoCentralizado("Setas para escolher, Enter para confirmar", 410, 16, GRAY);
+        }
+        else if (estado == ESTADO_RANKING) {
+            textoCentralizado("RANKING", 50, 40, RED);
+            if (totalRanking == 0) {
+                textoCentralizado("Nenhum recorde ainda", 200, 22, WHITE);
+            }
+            for (int i = 0; i < totalRanking; i++) {
+                textoCentralizado(TextFormat("%d. %s  -  %d niveis", i + 1, ranking[i].nome, ranking[i].niveis),
+                                130 + i * 45, 28, i == 0 ? GOLD : WHITE);
+            }
+            textoCentralizado("Enter para voltar", 400, 18, GRAY);
         }
         else {
             for (int l = 0; l < LINHAS; l++) {
@@ -338,11 +479,30 @@ int main(void) {
             DrawText(TextFormat("Nivel: %d", nivel), 10, 10, 20, WHITE);
             DrawText(TextFormat("Tempo: %.1f", tempo), 10, 35, 20, tempo < 5 ? RED : WHITE);
 
-            if (gameOver) {
-                DrawRectangle(0, 0, LARGURA, ALTURA, Fade(BLACK, 0.6f));
-                desenharCentralizado(texGameOver, 60, 500);
-                DrawText(TextFormat("Niveis passados: %d", nivel), 300, 215, 22, WHITE);
-                DrawText("Enter para recomecar", 295, 255, 20, LIGHTGRAY);
+            if (estado == ESTADO_GAMEOVER || estado == ESTADO_NOME) {
+                DrawRectangle(0, 0, LARGURA, ALTURA, Fade(BLACK, 0.7f));
+                desenharCentralizado(texGameOver, 30, 400);
+                textoCentralizado(TextFormat("Niveis passados: %d", nivel), 215, 22, WHITE);
+
+                if (estado == ESTADO_GAMEOVER) {
+                    const char *textoSalvar = recordeSalvo ? "RECORDE SALVO" : (podeSalvar ? "SALVAR RECORDE" : "NAO ENTROU NO TOP 5");
+                    const char *opcoes[3] = { "RECOMECAR", textoSalvar, "MENU" };
+
+                    for (int i = 0; i < 3; i++) {
+                        Color cor = (opcaoGameOver == i) ? RED : WHITE;
+                        if (i == 1 && !podeSalvar) cor = (opcaoGameOver == i) ? MAROON : DARKGRAY;
+                        textoCentralizado(opcoes[i], 260 + i * 35, 24, cor);
+                    }
+                    textoCentralizado("Setas para escolher, Enter para confirmar", 400, 16, GRAY);
+                } else {
+                    textoCentralizado("Digite seu nome", 255, 20, LIGHTGRAY);
+                    for (int i = 0; i < 3; i++) {
+                        int x = LARGURA / 2 - 60 + i * 40;
+                        DrawText(TextFormat("%c", nome[i]), x + 8, 290, 36, i == letraAtual ? RED : WHITE);
+                        if (i == letraAtual) DrawRectangle(x + 4, 330, 28, 4, RED);
+                    }
+                    textoCentralizado("Setas trocam a letra, Enter salva, Backspace cancela", 400, 16, GRAY);
+                }
             }
         }
         EndTextureMode();
