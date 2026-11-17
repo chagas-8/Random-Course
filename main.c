@@ -26,6 +26,8 @@
 #define DT_SIMULACAO (1.0f / 60.0f)
 #define MAX_RANKING 5
 #define ARQUIVO_RANKING "ranking.txt"
+#define COR_DESTAQUE GREEN
+#define COR_DESTAQUE_INATIVA DARKGREEN
 
 typedef struct {
     Rectangle corpo;
@@ -479,8 +481,8 @@ int main(void) {
 
         if (estado == ESTADO_MENU) {
             desenharCentralizado(texLogo, 50, 600);
-            textoCentralizado("JOGAR", 300, 28, opcaoMenu == 0 ? RED : WHITE);
-            textoCentralizado("RANKING", 340, 28, opcaoMenu == 1 ? RED : WHITE);
+            textoCentralizado("JOGAR", 300, 28, opcaoMenu == 0 ? COR_DESTAQUE : WHITE);
+            textoCentralizado("RANKING", 340, 28, opcaoMenu == 1 ? COR_DESTAQUE : WHITE);
             textoCentralizado("F para tela cheia, Setas/WASD para escolher, Enter para confirmar, Esc para sair", 410, 16, GRAY);
         }
         else if (estado == ESTADO_RANKING) {
@@ -527,8 +529,8 @@ int main(void) {
                     const char *opcoes[3] = { "RECOMECAR", textoSalvar, "MENU" };
 
                     for (int i = 0; i < 3; i++) {
-                        Color cor = (opcaoGameOver == i) ? RED : WHITE;
-                        if (i == 1 && !podeSalvar) cor = (opcaoGameOver == i) ? MAROON : DARKGRAY;
+                        Color cor = (opcaoGameOver == i) ? COR_DESTAQUE : WHITE;
+                        if (i == 1 && !podeSalvar) cor = (opcaoGameOver == i) ? COR_DESTAQUE_INATIVA : DARKGRAY;
                         textoCentralizado(opcoes[i], 260 + i * 35, 24, cor);
                     }
                     textoCentralizado("Setas/WASD para escolher, Enter para confirmar", 400, 16, GRAY);
@@ -536,8 +538,8 @@ int main(void) {
                     textoCentralizado("Digite seu nome", 255, 20, LIGHTGRAY);
                     for (int i = 0; i < 3; i++) {
                         int x = LARGURA / 2 - 60 + i * 40;
-                        DrawText(TextFormat("%c", nome[i]), x + 8, 290, 36, i == letraAtual ? RED : WHITE);
-                        if (i == letraAtual) DrawRectangle(x + 4, 330, 28, 4, RED);
+                        DrawText(TextFormat("%c", nome[i]), x + 8, 290, 36, i == letraAtual ? COR_DESTAQUE : WHITE);
+                        if (i == letraAtual) DrawRectangle(x + 4, 330, 28, 4, COR_DESTAQUE);
                     }
                     textoCentralizado("Teclado escreve, Setas trocam a letra, Enter salva, Backspace cancela", 400, 16, GRAY);
                 }
