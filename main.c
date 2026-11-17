@@ -21,7 +21,9 @@
 #define TIPO_PILAR 0
 #define TIPO_FLUTUANTE 1
 #define TIPO_TETO 2
-#define PULO_MAX_ALTURA 3
+#define LARG_JOGADOR 20
+#define ALT_JOGADOR 40
+#define DT_SIMULACAO (1.0f / 60.0f)
 #define MAX_RANKING 5
 #define ARQUIVO_RANKING "ranking.txt"
 
@@ -51,7 +53,7 @@ typedef enum {
 } Estado;
 
 void resetarJogador(Jogador *j) {
-    j->corpo = (Rectangle){ 40, 344, 20, 40 };
+    j->corpo = (Rectangle){ 40, 344, LARG_JOGADOR, ALT_JOGADOR };
     j->vel = (Vector2){ 0, 0 };
     j->noChao = false;
 }
@@ -97,6 +99,30 @@ bool tocaTipo(int **mapa, Rectangle r, int tipo) {
         }
     }
     return false;
+}
+
+void moverJogador(int **mapa, Jogador *j, float dt) {
+    j->vel.y += GRAVIDADE * dt;
+
+    j->corpo.x += j->vel.x * dt;
+    if (tocaTipo(mapa, j->corpo, BLOCO)) {
+        if (j->vel.x > 0) j->corpo.x = floorf((j->corpo.x + j->corpo.width) / TAM_BLOCO) * TAM_BLOCO - j->corpo.width;
+        else if (j->vel.x < 0) j->corpo.x = (floorf(j->corpo.x / TAM_BLOCO) + 1) * TAM_BLOCO;
+    }
+    if (j->corpo.x < 0) j->corpo.x = 0;
+    if (j->corpo.x + j->corpo.width > LARGURA) j->corpo.x = LARGURA - j->corpo.width;
+
+    j->corpo.y += j->vel.y * dt;
+    j->noChao = false;
+    if (tocaTipo(mapa, j->corpo, BLOCO)) {
+        if (j->vel.y > 0) {
+            j->corpo.y = floorf((j->corpo.y + j->corpo.height) / TAM_BLOCO) * TAM_BLOCO - j->corpo.height;
+            j->noChao = true;
+        } else if (j->vel.y < 0) {
+            j->corpo.y = (floorf(j->corpo.y / TAM_BLOCO) + 1) * TAM_BLOCO;
+        }
+        j->vel.y = 0;
+    }
 }
 
 Plataforma *adicionarPlataforma(Plataforma *lista, int tipo, int col, int lin, int larg, int alt) {
@@ -167,49 +193,63 @@ bool podeFicarEmPe(int **mapa, int l, int c) {
     return livre(mapa, l, c) && livre(mapa, l - 1, c) && lerCelula(mapa, l + 1, c) == BLOCO;
 }
 
-bool colunaLivre(int **mapa, int c, int lTopo, int lBase) {
-    for (int l = lTopo; l <= lBase; l++) {
-        if (!livre(mapa, l, c) || !livre(mapa, l - 1, c)) return false;
-    }
-    return true;
-}
+int simularMovimento(int **mapa, float x, float y, bool pular, int dir1, int dir2, float troca, int *linDestino, int *colDestino) {
+    Jogador s;
+    s.corpo = (Rectangle){ x, y, LARG_JOGADOR, ALT_JOGADOR };
+    s.vel = (Vector2){ 0, pular ? -VEL_PULO : 0 };
+    s.noChao = true;
+    bool saiuDoChao = false;
 
-bool linhaLivre(int **mapa, int l, int c1, int c2) {
-    int inicio = c1 < c2 ? c1 : c2;
-    int fim = c1 < c2 ? c2 : c1;
-    for (int c = inicio; c <= fim; c++) {
-        if (!livre(mapa, l, c) || !livre(mapa, l - 1, c)) return false;
-    }
-    return true;
-}
+    for (float t = 0; t < 2.5f; t += DT_SIMULACAO) {
+        int dir = t < troca ? dir1 : dir2;
+        s.vel.x = dir * VEL_ANDAR;
+        moverJogador(mapa, &s, DT_SIMULACAO);
 
-bool caminhoLivre(int **mapa, int l1, int c1, int l2, int c2) {
-    if (l2 < l1) {
-        return colunaLivre(mapa, c1, l2, l1) && linhaLivre(mapa, l2, c1, c2);
-    }
-    return linhaLivre(mapa, l1, c1, c2) && colunaLivre(mapa, c2, l1, l2);
-}
+        if (tocaTipo(mapa, s.corpo, PORTA)) return 2;
+        if (s.corpo.y > ALTURA) return 0;
 
-int alcanceHorizontal(int subida) {
-    if (subida >= 3) return 3;
-    if (subida == 2) return 4;
-    return 5;
+        if (!s.noChao) {
+            saiuDoChao = true;
+        } else if (saiuDoChao) {
+            int lin = (int)floorf((s.corpo.y + s.corpo.height) / TAM_BLOCO) - 1;
+            int c1 = (int)floorf(s.corpo.x / TAM_BLOCO);
+            int c2 = (int)floorf((s.corpo.x + s.corpo.width - 0.01f) / TAM_BLOCO);
+            for (int c = c1; c <= c2; c++) {
+                if (podeFicarEmPe(mapa, lin, c)) {
+                    *linDestino = lin;
+                    *colDestino = c;
+                    return 1;
+                }
+            }
+            return 0;
+        } else if (t > 0.3f) {
+            return 0;
+        }
+    }
+    return 0;
 }
 
 bool explorar(int **mapa, int **visitado, int l, int c) {
     if (visitado[l][c]) return false;
     visitado[l][c] = 1;
 
-    if (lerCelula(mapa, l, c) == PORTA || lerCelula(mapa, l - 1, c) == PORTA) return true;
+    if (podeFicarEmPe(mapa, l, c - 1) && explorar(mapa, visitado, l, c - 1)) return true;
+    if (podeFicarEmPe(mapa, l, c + 1) && explorar(mapa, visitado, l, c + 1)) return true;
 
-    for (int l2 = l - PULO_MAX_ALTURA; l2 < LINHAS - 1; l2++) {
-        int alcance = alcanceHorizontal(l - l2);
-        for (int c2 = c - alcance; c2 <= c + alcance; c2++) {
-            if (podeFicarEmPe(mapa, l2, c2) && caminhoLivre(mapa, l, c, l2, c2)) {
-                if (explorar(mapa, visitado, l2, c2)) return true;
-            }
-        }
-    }
+    float y = (l + 1) * TAM_BLOCO - ALT_JOGADOR;
+    float posicoes[2] = { c * TAM_BLOCO, c * TAM_BLOCO + TAM_BLOCO - LARG_JOGADOR };
+    float trocas[4] = { 0.1f, 0.2f, 0.3f, 0.45f };
+
+    for (int p = 0; p < 2; p++)
+        for (int pulo = 0; pulo < 2; pulo++)
+            for (int d1 = -1; d1 <= 1; d1++)
+                for (int d2 = -1; d2 <= 1; d2++)
+                    for (int t = 0; t < 4; t++) {
+                        int l2, c2;
+                        int r = simularMovimento(mapa, posicoes[p], y, pulo, d1, d2, trocas[t], &l2, &c2);
+                        if (r == 2) return true;
+                        if (r == 1 && explorar(mapa, visitado, l2, c2)) return true;
+                    }
     return false;
 }
 
@@ -364,28 +404,7 @@ int main(void) {
 
             bool pulo = IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W);
             if (pulo && j.noChao) j.vel.y = -VEL_PULO;
-
-            j.vel.y += GRAVIDADE * dt;
-
-            j.corpo.x += j.vel.x * dt;
-            if (tocaTipo(mapa, j.corpo, BLOCO)) {
-                if (j.vel.x > 0) j.corpo.x = floorf((j.corpo.x + j.corpo.width) / TAM_BLOCO) * TAM_BLOCO - j.corpo.width;
-                else if (j.vel.x < 0) j.corpo.x = (floorf(j.corpo.x / TAM_BLOCO) + 1) * TAM_BLOCO;
-            }
-            if (j.corpo.x < 0) j.corpo.x = 0;
-            if (j.corpo.x + j.corpo.width > LARGURA) j.corpo.x = LARGURA - j.corpo.width;
-
-            j.corpo.y += j.vel.y * dt;
-            j.noChao = false;
-            if (tocaTipo(mapa, j.corpo, BLOCO)) {
-                if (j.vel.y > 0) {
-                    j.corpo.y = floorf((j.corpo.y + j.corpo.height) / TAM_BLOCO) * TAM_BLOCO - j.corpo.height;
-                    j.noChao = true;
-                } else if (j.vel.y < 0) {
-                    j.corpo.y = (floorf(j.corpo.y / TAM_BLOCO) + 1) * TAM_BLOCO;
-                }
-                j.vel.y = 0;
-            }
+            moverJogador(mapa, &j, dt);
             tempo -= dt;
             if (j.corpo.y > ALTURA || tempo <= 0) {
                 estado = ESTADO_GAMEOVER;
@@ -427,7 +446,7 @@ int main(void) {
 
             int tecla = GetCharPressed();
             if (tecla >= 'a' && tecla <= 'z') tecla -= 32;
-            if (tecla >= 'A' && tecla <= 'Z') {
+            if ((tecla >= 'A' && tecla <= 'Z') || (tecla >= '0' && tecla <= '9')) {
                 nome[letraAtual] = (char)tecla;
                 if (letraAtual < 2) letraAtual++;
             }
