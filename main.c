@@ -28,6 +28,9 @@
 #define ARQUIVO_RANKING "ranking.txt"
 #define COR_DESTAQUE GREEN
 #define COR_DESTAQUE_INATIVA DARKGREEN
+#define TIPO_MOVEL 3
+#define NIVEL_MOVEIS 2
+#define CHANCE_MOVEIS 40
 
 typedef struct {
     Rectangle corpo;
@@ -39,6 +42,9 @@ typedef struct {
 typedef struct Plataforma {
     int tipo;
     int col, lin, larg, alt;
+    float x, y;
+    float vel;
+    float xMin, xMax;
     struct Plataforma *prox;
 } Plataforma;
 
@@ -136,6 +142,10 @@ Plataforma *adicionarPlataforma(Plataforma *lista, int tipo, int col, int lin, i
     nova->lin = lin;
     nova->larg = larg;
     nova->alt = alt;
+    nova->x = col * TAM_BLOCO;
+    nova->y = lin * TAM_BLOCO;
+    nova->vel = 0;
+    nova->xMin = nova->xMax = nova->x;
     nova->prox = lista;
     return nova;
 }
@@ -178,12 +188,13 @@ Plataforma *sortearPlataformas(void) {
 }
 
 void montarFase(int **mapa, Plataforma *lista) {
-    preencherArea(mapa, 0, 0, COLUNAS, LINHAS, VAZIO);
+     preencherArea(mapa, 0, 0, COLUNAS, LINHAS, VAZIO);
     preencherArea(mapa, 0, 12, 5, 2, BLOCO);
     preencherArea(mapa, 20, 5, 5, 1, BLOCO);
     preencherArea(mapa, 23, 3, 1, 2, PORTA);
 
     for (Plataforma *p = lista; p != NULL; p = p->prox) {
+        if (p->tipo == TIPO_MOVEL) continue;
         preencherArea(mapa, p->col, p->lin, p->larg, p->alt, BLOCO);
     }
 }
@@ -197,6 +208,67 @@ bool podeFicarEmPe(int **mapa, int l, int c) {
     return livre(mapa, l, c) && livre(mapa, l - 1, c) && lerCelula(mapa, l + 1, c) == BLOCO;
 }
 
+bool faixaLivre(int **mapa, int lin, int c) {
+    return livre(mapa, lin, c) && livre(mapa, lin - 1, c) && livre(mapa, lin - 2, c);
+}
+
+Plataforma *sortearMoveis(Plataforma *lista, int **mapa, int nivel) {
+    if (nivel < NIVEL_MOVEIS || GetRandomValue(1, 100) > CHANCE_MOVEIS) return lista;
+
+    int quantidade = GetRandomValue(1, 2);
+    for (int i = 0; i < quantidade; i++) {
+        for (int tentativa = 0; tentativa < 20; tentativa++) {
+            int lin = GetRandomValue(4, 10);
+            int larg = GetRandomValue(2, 3);
+            int ini = GetRandomValue(5, 19);
+            if (!faixaLivre(mapa, lin, ini)) continue;
+
+            int fim = ini;
+            while (ini > 5 && faixaLivre(mapa, lin, ini - 1)) ini--;
+            while (fim < 19 && faixaLivre(mapa, lin, fim + 1)) fim++;
+            if (fim - ini + 1 < larg + 2) continue;
+
+            lista = adicionarPlataforma(lista, TIPO_MOVEL, ini, lin, larg, 1);
+            lista->xMin = ini * TAM_BLOCO;
+            lista->xMax = (fim + 1 - larg) * TAM_BLOCO;
+            lista->vel = GetRandomValue(60, 110) * (GetRandomValue(0, 1) ? 1 : -1);
+            break;
+        }
+    }
+    return lista;
+}
+
+void atualizarMoveis(Plataforma *lista, float dt) {
+    for (Plataforma *p = lista; p != NULL; p = p->prox) {
+        if (p->tipo != TIPO_MOVEL) continue;
+        p->x += p->vel * dt;
+        if (p->x < p->xMin) { p->x = p->xMin; p->vel = -p->vel; }
+        if (p->x > p->xMax) { p->x = p->xMax; p->vel = -p->vel; }
+    }
+}
+
+void colidirMoveis(Plataforma *lista, int **mapa, Jogador *j, float pesAntes, float dt) {
+    if (j->vel.y < 0) return;
+
+    for (Plataforma *p = lista; p != NULL; p = p->prox) {
+        if (p->tipo != TIPO_MOVEL) continue;
+
+        float largura = p->larg * TAM_BLOCO;
+        bool emCimaX = j->corpo.x + j->corpo.width > p->x && j->corpo.x < p->x + largura;
+        float pes = j->corpo.y + j->corpo.height;
+
+        if (emCimaX && pesAntes <= p->y + 1 && pes >= p->y) {
+            j->corpo.y = p->y - j->corpo.height;
+            j->vel.y = 0;
+            j->noChao = true;
+
+            float antes = j->corpo.x;
+            j->corpo.x += p->vel * dt;
+            if (tocaTipo(mapa, j->corpo, BLOCO)) j->corpo.x = antes;
+            return;
+        }
+    }
+}
 int simularMovimento(int **mapa, float x, float y, bool pular, int dir1, int dir2, float troca, int *linDestino, int *colDestino) {
     Jogador s;
     s.corpo = (Rectangle){ x, y, LARG_JOGADOR, ALT_JOGADOR };
@@ -264,12 +336,13 @@ bool faseValida(int **mapa) {
     return ok;
 }
 
-void novaFase(int **mapa, Plataforma **lista) {
+void novaFase(int **mapa, Plataforma **lista, int nivel) {
     do {
         liberarLista(*lista);
         *lista = sortearPlataformas();
         montarFase(mapa, *lista);
     } while (!faseValida(mapa));
+    *lista = sortearMoveis(*lista, mapa, nivel);
 }
 
 void iniciarPartida(Jogador *j, int **mapa, Plataforma **lista, int *nivel, float *tempoMax, float *tempo) {
@@ -277,9 +350,8 @@ void iniciarPartida(Jogador *j, int **mapa, Plataforma **lista, int *nivel, floa
     *tempoMax = TEMPO_INICIAL;
     *tempo = *tempoMax;
     resetarJogador(j);
-    novaFase(mapa, lista);
+    novaFase(mapa, lista, *nivel);
 }
-
 int lerRanking(Recorde ranking[]) {
     FILE *arq = fopen(ARQUIVO_RANKING, "r");
     if (arq == NULL) return 0;
@@ -365,7 +437,7 @@ int main(void) {
     int **mapa = criarMapa();
     SetRandomSeed((unsigned int)time(NULL));
     Plataforma *plataformas = NULL;
-    novaFase(mapa, &plataformas);
+    novaFase(mapa, &plataformas, 0);
 
     Jogador j;
     resetarJogador(&j);
@@ -411,7 +483,10 @@ int main(void) {
 
             bool pulo = IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W);
             if (pulo && j.noChao) j.vel.y = -VEL_PULO;
+            float pesAntes = j.corpo.y + j.corpo.height;
+            atualizarMoveis(plataformas, dt);
             moverJogador(mapa, &j, dt);
+            colidirMoveis(plataformas, mapa, &j, pesAntes, dt);
             tempo -= dt;
             if (j.corpo.y > ALTURA || tempo <= 0) {
                 estado = ESTADO_GAMEOVER;
@@ -425,7 +500,7 @@ int main(void) {
                 if (tempoMax < TEMPO_MINIMO) tempoMax = TEMPO_MINIMO;
                 tempo = tempoMax;
                 resetarJogador(&j);
-                novaFase(mapa, &plataformas);
+                novaFase(mapa, &plataformas, nivel);
             }
         }
         else if (estado == ESTADO_GAMEOVER) {
@@ -511,6 +586,11 @@ int main(void) {
                         DrawTexture(texPorta, x, y, WHITE);
                     }
                 }
+            }
+                        for (Plataforma *p = plataformas; p != NULL; p = p->prox) {
+                if (p->tipo != TIPO_MOVEL) continue;
+                for (int i = 0; i < p->larg; i++)
+                    DrawTexture(texTopo, (int)p->x + i * TAM_BLOCO, (int)p->y, SKYBLUE);
             }
             Rectangle origemJogador = { 0, 0, (float)texJogador.width, (float)texJogador.height };
             if (j.olhandoEsquerda) origemJogador.width = -origemJogador.width;
