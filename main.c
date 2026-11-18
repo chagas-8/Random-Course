@@ -32,6 +32,8 @@
 #define TIPO_MOVEL 3
 #define NIVEL_MOVEIS 2
 #define CHANCE_MOVEIS 40
+#define CHANCE_VERTICAL 50
+#define MARGEM_BRILHO 5
 #define NIVEL_ESPINHOS 4
 #define MAX_ESPINHOS 5
 #define CHANCE_RELOGIO_INICIAL 20
@@ -51,6 +53,8 @@ typedef struct Plataforma {
     float x, y;
     float vel;
     float xMin, xMax;
+    bool vertical;
+    float yMin, yMax, yAntes;
     struct Plataforma *prox;
 } Plataforma;
 
@@ -167,6 +171,8 @@ Plataforma *adicionarPlataforma(Plataforma *lista, int tipo, int col, int lin, i
     nova->y = lin * TAM_BLOCO;
     nova->vel = 0;
     nova->xMin = nova->xMax = nova->x;
+    nova->vertical = false;
+    nova->yMin = nova->yMax = nova->yAntes = nova->y;
     nova->prox = lista;
     return nova;
 }
@@ -252,12 +258,56 @@ void colocarEspinhos(int **mapa, int nivel) {
     }
 }
 
+bool areaVerticalLivre(int **mapa, int lin, int ini, int larg) {
+    for (int c = ini; c < ini + larg; c++) {
+        if (!faixaLivre(mapa, lin, c)) return false;
+    }
+    return true;
+}
+
+Rectangle areaDoMovel(Plataforma *p) {
+    return (Rectangle){ p->xMin, p->yMin - 2 * TAM_BLOCO,
+                        p->xMax - p->xMin + p->larg * TAM_BLOCO,
+                        p->yMax - p->yMin + 3 * TAM_BLOCO };
+}
+
+bool sobrepoeMoveis(Plataforma *lista, Rectangle area) {
+    for (Plataforma *p = lista; p != NULL; p = p->prox) {
+        if (p->tipo == TIPO_MOVEL && CheckCollisionRecs(area, areaDoMovel(p))) return true;
+    }
+    return false;
+}
+
 Plataforma *sortearMoveis(Plataforma *lista, int **mapa, int nivel) {
     if (nivel < NIVEL_MOVEIS || GetRandomValue(1, 100) > CHANCE_MOVEIS) return lista;
 
     int quantidade = GetRandomValue(1, 2);
     for (int i = 0; i < quantidade; i++) {
+        bool vertical = GetRandomValue(1, 100) <= CHANCE_VERTICAL;
+
         for (int tentativa = 0; tentativa < 20; tentativa++) {
+            if (vertical) {
+                int larg = GetRandomValue(2, 3);
+                int ini = GetRandomValue(5, 20 - larg);
+                int lin = GetRandomValue(4, 10);
+                if (!areaVerticalLivre(mapa, lin, ini, larg)) continue;
+
+                int topo = lin, base = lin;
+                while (topo > 3 && areaVerticalLivre(mapa, topo - 1, ini, larg)) topo--;
+                while (base < 11 && areaVerticalLivre(mapa, base + 1, ini, larg)) base++;
+                if (base - topo < 2) continue;
+
+                Rectangle area = { ini * TAM_BLOCO, (topo - 2) * TAM_BLOCO, larg * TAM_BLOCO, (base - topo + 3) * TAM_BLOCO };
+                if (sobrepoeMoveis(lista, area)) continue;
+
+                lista = adicionarPlataforma(lista, TIPO_MOVEL, ini, lin, larg, 1);
+                lista->vertical = true;
+                lista->yMin = topo * TAM_BLOCO;
+                lista->yMax = base * TAM_BLOCO;
+                lista->vel = GetRandomValue(50, 80) * (GetRandomValue(0, 1) ? 1 : -1);
+                break;
+            }
+
             int lin = GetRandomValue(4, 10);
             int larg = GetRandomValue(2, 3);
             int ini = GetRandomValue(5, 19);
@@ -267,6 +317,9 @@ Plataforma *sortearMoveis(Plataforma *lista, int **mapa, int nivel) {
             while (ini > 5 && faixaLivre(mapa, lin, ini - 1)) ini--;
             while (fim < 19 && faixaLivre(mapa, lin, fim + 1)) fim++;
             if (fim - ini + 1 < larg + 2) continue;
+
+            Rectangle area = { ini * TAM_BLOCO, (lin - 2) * TAM_BLOCO, (fim + 1 - ini) * TAM_BLOCO, 3 * TAM_BLOCO };
+            if (sobrepoeMoveis(lista, area)) continue;
 
             lista = adicionarPlataforma(lista, TIPO_MOVEL, ini, lin, larg, 1);
             lista->xMin = ini * TAM_BLOCO;
@@ -281,9 +334,17 @@ Plataforma *sortearMoveis(Plataforma *lista, int **mapa, int nivel) {
 void atualizarMoveis(Plataforma *lista, float dt) {
     for (Plataforma *p = lista; p != NULL; p = p->prox) {
         if (p->tipo != TIPO_MOVEL) continue;
-        p->x += p->vel * dt;
-        if (p->x < p->xMin) { p->x = p->xMin; p->vel = -p->vel; }
-        if (p->x > p->xMax) { p->x = p->xMax; p->vel = -p->vel; }
+        p->yAntes = p->y;
+
+        if (p->vertical) {
+            p->y += p->vel * dt;
+            if (p->y < p->yMin) { p->y = p->yMin; p->vel = -p->vel; }
+            if (p->y > p->yMax) { p->y = p->yMax; p->vel = -p->vel; }
+        } else {
+            p->x += p->vel * dt;
+            if (p->x < p->xMin) { p->x = p->xMin; p->vel = -p->vel; }
+            if (p->x > p->xMax) { p->x = p->xMax; p->vel = -p->vel; }
+        }
     }
 }
 
@@ -297,14 +358,18 @@ void colidirMoveis(Plataforma *lista, int **mapa, Jogador *j, float pesAntes, fl
         bool emCimaX = j->corpo.x + j->corpo.width > p->x && j->corpo.x < p->x + largura;
         float pes = j->corpo.y + j->corpo.height;
 
-        if (emCimaX && pesAntes <= p->y + 1 && pes >= p->y) {
+        float folga = p->vertical ? 3 : 0;
+
+        if (emCimaX && pesAntes <= p->yAntes + 1 && pes >= p->y - folga) {
             j->corpo.y = p->y - j->corpo.height;
             j->vel.y = 0;
             j->noChao = true;
 
-            float antes = j->corpo.x;
-            j->corpo.x += p->vel * dt;
-            if (tocaTipo(mapa, j->corpo, BLOCO)) j->corpo.x = antes;
+            if (!p->vertical) {
+                float antes = j->corpo.x;
+                j->corpo.x += p->vel * dt;
+                if (tocaTipo(mapa, j->corpo, BLOCO)) j->corpo.x = antes;
+            }
             return;
         }
     }
@@ -490,6 +555,8 @@ int main(void) {
     Texture2D texGameOver = LoadTexture("assets/gameover.png");
     Texture2D texRelogio  = LoadTexture("assets/relogio.png");
     Texture2D texEspinho  = LoadTexture("assets/espinho.png");
+    Texture2D texMovel2   = LoadTexture("assets/plataforma_movel_2.png");
+    Texture2D texMovel3   = LoadTexture("assets/plataforma_movel_3.png");
 
     RenderTexture2D tela = LoadRenderTexture(LARGURA, ALTURA);
     SetTextureFilter(tela.texture, TEXTURE_FILTER_POINT);
@@ -662,8 +729,8 @@ int main(void) {
             }
             for (Plataforma *p = plataformas; p != NULL; p = p->prox) {
                 if (p->tipo != TIPO_MOVEL) continue;
-                for (int i = 0; i < p->larg; i++)
-                    DrawTexture(texTopo, (int)p->x + i * TAM_BLOCO, (int)p->y, SKYBLUE);
+                Texture2D tex = (p->larg == 2) ? texMovel2 : texMovel3;
+                DrawTexture(tex, (int)p->x - MARGEM_BRILHO, (int)p->y - MARGEM_BRILHO, WHITE);
             }
 
             if (temRelogio) {
@@ -731,6 +798,8 @@ int main(void) {
     UnloadTexture(texGameOver);
     UnloadTexture(texRelogio);
     UnloadTexture(texEspinho);
+    UnloadTexture(texMovel2);
+    UnloadTexture(texMovel3);
     UnloadRenderTexture(tela);
     CloseWindow();
     return 0;
