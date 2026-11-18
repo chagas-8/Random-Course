@@ -39,6 +39,9 @@
 #define CHANCE_RELOGIO_INICIAL 20
 #define CHANCE_RELOGIO_POR_NIVEL 5
 #define CHANCE_RELOGIO_MAX 80
+#define FOLGA_ESPINHO 6
+#define VEL_PULO_SIM (VEL_PULO * 0.97f)
+#define VEL_ANDAR_SIM (VEL_ANDAR * 0.95f)
 
 typedef struct {
     Rectangle corpo;
@@ -377,17 +380,18 @@ void colidirMoveis(Plataforma *lista, int **mapa, Jogador *j, float pesAntes, fl
 int simularMovimento(int **mapa, float x, float y, bool pular, int dir1, int dir2, float troca, int *linDestino, int *colDestino) {
     Jogador s;
     s.corpo = (Rectangle){ x, y, LARG_JOGADOR, ALT_JOGADOR };
-    s.vel = (Vector2){ 0, pular ? -VEL_PULO : 0 };
+    s.vel = (Vector2){ 0, pular ? -VEL_PULO_SIM : 0 };
     s.noChao = true;
     bool saiuDoChao = false;
 
     for (float t = 0; t < 2.5f; t += DT_SIMULACAO) {
         int dir = t < troca ? dir1 : dir2;
-        s.vel.x = dir * VEL_ANDAR;
+        s.vel.x = dir * VEL_ANDAR_SIM;
         moverJogador(mapa, &s, DT_SIMULACAO);
 
         if (tocaTipo(mapa, s.corpo, PORTA)) return 2;
-        if (s.corpo.y > ALTURA || tocaEspinho(mapa, s.corpo)) return 0;
+        Rectangle comFolga = { s.corpo.x - FOLGA_ESPINHO / 2, s.corpo.y, s.corpo.width + FOLGA_ESPINHO, s.corpo.height + FOLGA_ESPINHO };  
+        if (s.corpo.y > ALTURA || tocaEspinho(mapa, comFolga)) return 0;
 
         if (!s.noChao) {
             saiuDoChao = true;
@@ -588,7 +592,7 @@ int main(void) {
         bool podeSalvar = !recordeSalvo && nivel > 0 && entraNoRanking(ranking, totalRanking, nivel);
         if (dt > 0.05f) dt = 0.05f;
 
-        if (IsKeyPressed(KEY_F)) ToggleBorderlessWindowed();
+        if (IsKeyPressed(KEY_F11)) ToggleBorderlessWindowed();
 
         if (estado == ESTADO_MENU) {
             if (IsKeyPressed(KEY_ESCAPE)) sair = true;
@@ -695,7 +699,7 @@ int main(void) {
             desenharCentralizado(texLogo, 50, 600);
             textoCentralizado("JOGAR", 300, 28, opcaoMenu == 0 ? COR_DESTAQUE : WHITE);
             textoCentralizado("RANKING", 340, 28, opcaoMenu == 1 ? COR_DESTAQUE : WHITE);
-            textoCentralizado("F para tela cheia, Setas/WASD para escolher, Enter para confirmar, Esc para sair", 410, 16, GRAY);
+            textoCentralizado("F11 para tela cheia, Setas/WASD para escolher, Enter para confirmar, Esc para sair", 410, 16, GRAY);
         }
         else if (estado == ESTADO_RANKING) {
             textoCentralizado("RANKING", 50, 40, RED);
