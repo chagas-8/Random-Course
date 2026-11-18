@@ -54,6 +54,8 @@ Um jogo simples de plataforma com um local fixo que o personagem começa e outro
 
 ## Controles
 
-- **Setas:** andar
+- **Setas/WASD:** andar
 - **Espaço:** pular
-- **Enter:** recomeçar após o game over
+- **Enter:** confirmar seleção
+- **F11:** tela cheia
+- **Esc:** voltar página/fechar o jogo
