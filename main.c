@@ -18,6 +18,7 @@
 #define VAZIO 0
 #define BLOCO 1
 #define PORTA 2
+#define ESPINHO 3
 #define TIPO_PILAR 0
 #define TIPO_FLUTUANTE 1
 #define TIPO_TETO 2
@@ -31,6 +32,11 @@
 #define TIPO_MOVEL 3
 #define NIVEL_MOVEIS 2
 #define CHANCE_MOVEIS 40
+#define NIVEL_ESPINHOS 4
+#define MAX_ESPINHOS 5
+#define CHANCE_RELOGIO_INICIAL 20
+#define CHANCE_RELOGIO_POR_NIVEL 5
+#define CHANCE_RELOGIO_MAX 80
 
 typedef struct {
     Rectangle corpo;
@@ -106,6 +112,21 @@ bool tocaTipo(int **mapa, Rectangle r, int tipo) {
     for (int l = l1; l <= l2; l++) {
         for (int c = c1; c <= c2; c++) {
             if (lerCelula(mapa, l, c) == tipo) return true;
+        }
+    }
+    return false;
+}
+
+bool tocaEspinho(int **mapa, Rectangle r) {
+    int c1 = (int)floorf(r.x / TAM_BLOCO);
+    int c2 = (int)floorf((r.x + r.width - 0.01f) / TAM_BLOCO);
+    int l1 = (int)floorf(r.y / TAM_BLOCO);
+    int l2 = (int)floorf((r.y + r.height - 0.01f) / TAM_BLOCO);
+    for (int l = l1; l <= l2; l++) {
+        for (int c = c1; c <= c2; c++) {
+            if (lerCelula(mapa, l, c) != ESPINHO) continue;
+            Rectangle ponta = { c * TAM_BLOCO + 4, l * TAM_BLOCO + 22, 24, 10 };
+            if (CheckCollisionRecs(r, ponta)) return true;
         }
     }
     return false;
@@ -188,7 +209,7 @@ Plataforma *sortearPlataformas(void) {
 }
 
 void montarFase(int **mapa, Plataforma *lista) {
-     preencherArea(mapa, 0, 0, COLUNAS, LINHAS, VAZIO);
+    preencherArea(mapa, 0, 0, COLUNAS, LINHAS, VAZIO);
     preencherArea(mapa, 0, 12, 5, 2, BLOCO);
     preencherArea(mapa, 20, 5, 5, 1, BLOCO);
     preencherArea(mapa, 23, 3, 1, 2, PORTA);
@@ -200,7 +221,8 @@ void montarFase(int **mapa, Plataforma *lista) {
 }
 
 bool livre(int **mapa, int l, int c) {
-    return lerCelula(mapa, l, c) != BLOCO;
+    int v = lerCelula(mapa, l, c);
+    return v != BLOCO && v != ESPINHO;
 }
 
 bool podeFicarEmPe(int **mapa, int l, int c) {
@@ -210,6 +232,24 @@ bool podeFicarEmPe(int **mapa, int l, int c) {
 
 bool faixaLivre(int **mapa, int lin, int c) {
     return livre(mapa, lin, c) && livre(mapa, lin - 1, c) && livre(mapa, lin - 2, c);
+}
+
+void colocarEspinhos(int **mapa, int nivel) {
+    if (nivel < NIVEL_ESPINHOS) return;
+
+    int quantidade = 1 + (nivel - NIVEL_ESPINHOS) / 2;
+    if (quantidade > MAX_ESPINHOS) quantidade = MAX_ESPINHOS;
+
+    for (int i = 0; i < quantidade; i++) {
+        for (int tentativa = 0; tentativa < 20; tentativa++) {
+            int l = GetRandomValue(1, LINHAS - 2);
+            int c = GetRandomValue(5, 19);
+            if (podeFicarEmPe(mapa, l, c)) {
+                mapa[l][c] = ESPINHO;
+                break;
+            }
+        }
+    }
 }
 
 Plataforma *sortearMoveis(Plataforma *lista, int **mapa, int nivel) {
@@ -282,7 +322,7 @@ int simularMovimento(int **mapa, float x, float y, bool pular, int dir1, int dir
         moverJogador(mapa, &s, DT_SIMULACAO);
 
         if (tocaTipo(mapa, s.corpo, PORTA)) return 2;
-        if (s.corpo.y > ALTURA) return 0;
+        if (s.corpo.y > ALTURA || tocaEspinho(mapa, s.corpo)) return 0;
 
         if (!s.noChao) {
             saiuDoChao = true;
@@ -341,6 +381,7 @@ void novaFase(int **mapa, Plataforma **lista, int nivel) {
         liberarLista(*lista);
         *lista = sortearPlataformas();
         montarFase(mapa, *lista);
+        colocarEspinhos(mapa, nivel);
     } while (!faseValida(mapa));
     *lista = sortearMoveis(*lista, mapa, nivel);
 }
@@ -400,6 +441,23 @@ void desenharCentralizado(Texture2D tex, float y, float larguraMax) {
     DrawTextureEx(tex, (Vector2){ x, y }, 0, escala, WHITE);
 }
 
+bool sortearRelogio(int **mapa, Rectangle *r, int nivel) {
+    int chance = CHANCE_RELOGIO_INICIAL + nivel * CHANCE_RELOGIO_POR_NIVEL;
+    if (chance > CHANCE_RELOGIO_MAX) chance = CHANCE_RELOGIO_MAX;
+    if (GetRandomValue(1, 100) > chance) return false;
+
+    for (int tentativa = 0; tentativa < 50; tentativa++) {
+        int l = GetRandomValue(1, LINHAS - 2);
+        int c = GetRandomValue(5, 19);
+
+        if (podeFicarEmPe(mapa, l, c)) {
+            *r = (Rectangle){ c * TAM_BLOCO + 4, l * TAM_BLOCO + 4, 24, 24 };
+            return true;
+        }
+    }
+    return false;
+}
+
 void textoCentralizado(const char *texto, int y, int tamanho, Color cor) {
     int x = (LARGURA - MeasureText(texto, tamanho)) / 2;
     DrawText(texto, x, y, tamanho, cor);
@@ -430,6 +488,8 @@ int main(void) {
     Texture2D texJogador = LoadTexture("assets/jogador.png");
     Texture2D texLogo    = LoadTexture("assets/logo.png");
     Texture2D texGameOver = LoadTexture("assets/gameover.png");
+    Texture2D texRelogio  = LoadTexture("assets/relogio.png");
+    Texture2D texEspinho  = LoadTexture("assets/espinho.png");
 
     RenderTexture2D tela = LoadRenderTexture(LARGURA, ALTURA);
     SetTextureFilter(tela.texture, TEXTURE_FILTER_POINT);
@@ -454,6 +514,8 @@ int main(void) {
     Recorde ranking[MAX_RANKING];
     int totalRanking = lerRanking(ranking);
     bool sair = false;
+    Rectangle relogio;
+    bool temRelogio = false;
     while (!WindowShouldClose() && !sair) {
         float dt = GetFrameTime();
         bool podeSalvar = !recordeSalvo && nivel > 0 && entraNoRanking(ranking, totalRanking, nivel);
@@ -467,6 +529,7 @@ int main(void) {
             if (IsKeyPressed(KEY_ENTER)) {
                 if (opcaoMenu == 0) {
                     iniciarPartida(&j, mapa, &plataformas, &nivel, &tempoMax, &tempo);
+                    temRelogio = sortearRelogio(mapa, &relogio, nivel);
                     estado = ESTADO_JOGO;
                 } else {
                     estado = ESTADO_RANKING;
@@ -488,10 +551,15 @@ int main(void) {
             moverJogador(mapa, &j, dt);
             colidirMoveis(plataformas, mapa, &j, pesAntes, dt);
             tempo -= dt;
-            if (j.corpo.y > ALTURA || tempo <= 0) {
+            if (j.corpo.y > ALTURA || tempo <= 0 || tocaEspinho(mapa, j.corpo)) {
                 estado = ESTADO_GAMEOVER;
                 opcaoGameOver = 0;
                 recordeSalvo = false;
+            }
+
+            if (temRelogio && CheckCollisionRecs(j.corpo, relogio)) {
+                tempo = fminf(tempo + 1.5f, tempoMax);
+                temRelogio = false;
             }
 
             if (tocaTipo(mapa, j.corpo, PORTA)) {
@@ -501,6 +569,7 @@ int main(void) {
                 tempo = tempoMax;
                 resetarJogador(&j);
                 novaFase(mapa, &plataformas, nivel);
+                temRelogio = sortearRelogio(mapa, &relogio, nivel);
             }
         }
         else if (estado == ESTADO_GAMEOVER) {
@@ -510,6 +579,7 @@ int main(void) {
             if (IsKeyPressed(KEY_ENTER)) {
                 if (opcaoGameOver == 0) {
                     iniciarPartida(&j, mapa, &plataformas, &nivel, &tempoMax, &tempo);
+                    temRelogio = sortearRelogio(mapa, &relogio, nivel);
                     estado = ESTADO_JOGO;
                 } else if (opcaoGameOver == 1 && podeSalvar) {
                     strcpy(nome, "AAA");
@@ -585,13 +655,22 @@ int main(void) {
                     else if (mapa[l][c] == PORTA && (l == 0 || mapa[l - 1][c] != PORTA)) {
                         DrawTexture(texPorta, x, y, WHITE);
                     }
+                    else if (mapa[l][c] == ESPINHO) {
+                        DrawTexture(texEspinho, x, y, WHITE);
+                    }
                 }
             }
-                        for (Plataforma *p = plataformas; p != NULL; p = p->prox) {
+            for (Plataforma *p = plataformas; p != NULL; p = p->prox) {
                 if (p->tipo != TIPO_MOVEL) continue;
                 for (int i = 0; i < p->larg; i++)
                     DrawTexture(texTopo, (int)p->x + i * TAM_BLOCO, (int)p->y, SKYBLUE);
             }
+
+            if (temRelogio) {
+                float flutua = sinf(GetTime() * 4) * 2;
+                DrawTexture(texRelogio, (int)relogio.x, (int)(relogio.y + flutua), WHITE);
+            }
+
             Rectangle origemJogador = { 0, 0, (float)texJogador.width, (float)texJogador.height };
             if (j.olhandoEsquerda) origemJogador.width = -origemJogador.width;
             DrawTextureRec(texJogador, origemJogador, (Vector2){ (int)j.corpo.x, (int)j.corpo.y }, WHITE);
@@ -650,6 +729,8 @@ int main(void) {
     UnloadTexture(texJogador);
     UnloadTexture(texLogo);
     UnloadTexture(texGameOver);
+    UnloadTexture(texRelogio);
+    UnloadTexture(texEspinho);
     UnloadRenderTexture(tela);
     CloseWindow();
     return 0;
