@@ -561,7 +561,11 @@ int main(void) {
     Texture2D texEspinho  = LoadTexture("assets/espinho.png");
     Texture2D texMovel2   = LoadTexture("assets/plataforma_movel_2.png");
     Texture2D texMovel3   = LoadTexture("assets/plataforma_movel_3.png");
-
+    InitAudioDevice();
+    Sound somPulo     = LoadSound("assets/pulo.wav");
+    Sound somPorta    = LoadSound("assets/porta.wav");
+    Sound somRelogio  = LoadSound("assets/relogio.wav");
+    Sound somGameOver = LoadSound("assets/gameover.wav");
     RenderTexture2D tela = LoadRenderTexture(LARGURA, ALTURA);
     SetTextureFilter(tela.texture, TEXTURE_FILTER_POINT);
 
@@ -616,7 +620,10 @@ int main(void) {
             else if (j.vel.x > 0) j.olhandoEsquerda = false;
 
             bool pulo = IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W);
-            if (pulo && j.noChao) j.vel.y = -VEL_PULO;
+                        if (pulo && j.noChao) {
+                j.vel.y = -VEL_PULO;
+                PlaySound(somPulo);
+            }
             float pesAntes = j.corpo.y + j.corpo.height;
             atualizarMoveis(plataformas, dt);
             moverJogador(mapa, &j, dt);
@@ -624,6 +631,7 @@ int main(void) {
             tempo -= dt;
             if (j.corpo.y > ALTURA || tempo <= 0 || tocaEspinho(mapa, j.corpo)) {
                 estado = ESTADO_GAMEOVER;
+                 PlaySound(somGameOver);
                 opcaoGameOver = 0;
                 recordeSalvo = false;
             }
@@ -631,10 +639,12 @@ int main(void) {
             if (temRelogio && CheckCollisionRecs(j.corpo, relogio)) {
                 tempo = fminf(tempo + 1.5f, tempoMax);
                 temRelogio = false;
+                 PlaySound(somRelogio);
             }
 
             if (tocaTipo(mapa, j.corpo, PORTA)) {
                 nivel++;
+                PlaySound(somPorta);
                 tempoMax *= 0.9f;
                 if (tempoMax < TEMPO_MINIMO) tempoMax = TEMPO_MINIMO;
                 tempo = tempoMax;
@@ -805,6 +815,11 @@ int main(void) {
     UnloadTexture(texMovel2);
     UnloadTexture(texMovel3);
     UnloadRenderTexture(tela);
+    UnloadSound(somPulo);
+    UnloadSound(somPorta);
+    UnloadSound(somRelogio);
+    UnloadSound(somGameOver);
+    CloseAudioDevice();
     CloseWindow();
     return 0;
 }
